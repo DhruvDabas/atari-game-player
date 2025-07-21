@@ -3,21 +3,21 @@ import random
 import sys
 
 pygame.init()
-WIDTH, HEIGHT = 680, 480
+WIDTH, HEIGHT = 680, 580
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Mini Breakout")
+pygame.display.set_caption("あたり")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-FPS = 60
+FPS = 90
 
-PADDLE_WIDTH, PADDLE_HEIGHT = 80, 10
-BALL_SIZE = 10
+PADDLE_WIDTH, PADDLE_HEIGHT = 85, 15
+BALL_SIZE = 15
 BLOCK_WIDTH, BLOCK_HEIGHT = 60, 20
 
 paddle = pygame.Rect(WIDTH//2 - PADDLE_WIDTH//2, HEIGHT - 40, PADDLE_WIDTH, PADDLE_HEIGHT)
 ball = pygame.Rect(WIDTH//2, HEIGHT//2, BALL_SIZE, BALL_SIZE)
 ball_vel = [4, -4]
-paddle_speed = 6
+paddle_speed = 7
 
 colors = [(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,165,0)]
 
@@ -37,11 +37,15 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 36)
 
 def reset_ball_paddle():
-    ball.x = WIDTH // 2
-    ball.y = HEIGHT // 2
-    ball_vel[0] = random.choice([-4, 4])
+    paddle.x = random.randint(0, WIDTH - PADDLE_WIDTH)
+    
+    paddle.y = HEIGHT - 40
+
+    ball.x = random.randint(50, WIDTH - 50 - BALL_SIZE)
+    ball.y = random.randint(HEIGHT // 3, HEIGHT // 2)
+
+    ball_vel[0] = random.choice([-4, -3, 3, 4])
     ball_vel[1] = -4
-    paddle.x = WIDTH // 2 - PADDLE_WIDTH // 2
 
 reset_ball_paddle()
 
@@ -86,13 +90,12 @@ while running:
             ball_vel[0] *= -1
 
     if ball.bottom >= HEIGHT:
-        # Reset ball, paddle, and blocks on miss
         reset_ball_paddle()
         blocks = create_blocks()
 
     if not blocks:
         WIN.fill((0, 0, 0))
-        show_message("You Win!")
+        show_message("Winner! ")
         reset_ball_paddle()
         blocks = create_blocks()
 
