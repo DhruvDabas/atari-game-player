@@ -1,110 +1,120 @@
 import pygame
 import random
-import sys
+import numpy as np
 
-pygame.init()
-WIDTH, HEIGHT = 680, 580
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("あたり")
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-FPS = 90
+class AtariEnv:
+    def __init__(self):
 
-PADDLE_WIDTH, PADDLE_HEIGHT = 85, 15
-BALL_SIZE = 15
-BLOCK_WIDTH, BLOCK_HEIGHT = 60, 20
+        pygame.init()
+        self.WIDTH, self.HEIGHT = 680, 580
+        self.PADDLE_WIDTH, self.PADDLE_HEIGHT = 85, 15
+        self.BALL_SIZE = 15
+        self.BLOCK_WIDTH, self.BLOCK_HEIGHT = 60, 20
 
-paddle = pygame.Rect(WIDTH//2 - PADDLE_WIDTH//2, HEIGHT - 40, PADDLE_WIDTH, PADDLE_HEIGHT)
-ball = pygame.Rect(WIDTH//2, HEIGHT//2, BALL_SIZE, BALL_SIZE)
-ball_vel = [4, -4]
-paddle_speed = 7
+        self.paddle_speed = 7
+        self.ball_speed = 4
 
-colors = [(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,165,0)]
+        self.colors = [(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,165,0)]
 
-def create_blocks():
-    blocks = []
-    for row in range(5):
-        for col in range(WIDTH // (BLOCK_WIDTH + 10)):
-            x = col * (BLOCK_WIDTH + 10) + 35
-            y = row * (BLOCK_HEIGHT + 5) + 30
-            rect = pygame.Rect(x, y, BLOCK_WIDTH, BLOCK_HEIGHT)
-            blocks.append((rect, colors[row % len(colors)]))
-    return blocks
+        self.display = False  # turn off when training, set True to render
 
-blocks = create_blocks()
+        if self.display:
+            self.WIN = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+            pygame.display.set_caption("Atari Env")
 
-clock = pygame.time.Clock()
-font = pygame.font.SysFont("Arial", 36)
+        self.clock = pygame.time.Clock()
+        self.FPS = 90
 
-def reset_ball_paddle():
-    paddle.x = random.randint(0, WIDTH - PADDLE_WIDTH)
-    
-    paddle.y = HEIGHT - 40
+        self.reset()
 
-    ball.x = random.randint(50, WIDTH - 50 - BALL_SIZE)
-    ball.y = random.randint(HEIGHT // 3, HEIGHT // 2)
+    def create_blocks(self):
+        blocks = []
+        for row in range(5):
+            for col in range(self.WIDTH // (self.BLOCK_WIDTH + 10)):
+                x = col * (self.BLOCK_WIDTH + 10) + 35
+                y = row * (self.BLOCK_HEIGHT + 5) + 30
+                rect = pygame.Rect(x, y, self.BLOCK_WIDTH, self.BLOCK_HEIGHT)
+                blocks.append((rect, self.colors[row % len(self.colors)]))
+        return blocks
 
-    ball_vel[0] = random.choice([-4, -3, 3, 4])
-    ball_vel[1] = -4
+    def reset(self):
+        self.paddle = pygame.Rect(
+            random.randint(0, self.WIDTH - self.PADDLE_WIDTH),
+            self.HEIGHT - 40,
+            self.PADDLE_WIDTH,
+            self.PADDLE_HEIGHT
+        )
+        self.ball = pygame.Rect(
+            random.randint(50, self.WIDTH - 50 - self.BALL_SIZE),
+            random.randint(self.HEIGHT // 3, self.HEIGHT // 2),
+            self.BALL_SIZE,
+            self.BALL_SIZE
+        )
+        self.ball_vel = [random.choice([-4, -3, 3, 4]), -4]
+        self.blocks = self.create_blocks()
+        self.done = False
+        return self.get_state()
 
-reset_ball_paddle()
+    def get_state(self):
+        return np.array([
+            self.paddle.x / self.WIDTH,
+            self.ball.x / self.WIDTH,
+            self.ball.y / self.HEIGHT,
+            self.ball_vel[0] / self.ball_speed,
+            self.ball_vel[1] / self.ball_speed
+        ], dtype=np.float32)
 
-def show_message(msg):
-    text = font.render(msg, True, WHITE)
-    rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-    WIN.blit(text, rect)
-    pygame.display.flip()
-    pygame.time.delay(2000)
+    def step(self, action):
+        if action == 1 and self.paddle.left > 0:
+            self.paddle.x -= self.paddle_speed
+        elif action == 2 and self.paddle.right < self.WIDTH:
+            self.paddle.x += self.paddle_speed
 
-running = True
-while running:
-    clock.tick(FPS)
-    WIN.fill((30, 30, 30))
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+        self.ball.x += self.ball_vel[0]
+        self.ball.y += self.ball_vel[1]
 
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_LEFT] and paddle.left > 0:
-        paddle.x -= paddle_speed
-    if keys[pygame.K_RIGHT] and paddle.right < WIDTH:
-        paddle.x += paddle_speed
+        reward = 0
 
-    ball.x += ball_vel[0]
-    ball.y += ball_vel[1]
+        if self.ball.left <= 0 or self.ball.right >= self.WIDTH:
+            self.ball_vel[0] *= -1
+        if self.ball.top <= 0:
+            self.ball_vel[1] *= -1
 
-    if ball.left <= 0 or ball.right >= WIDTH:
-        ball_vel[0] *= -1
-    if ball.top <= 0:
-        ball_vel[1] *= -1
-    if ball.colliderect(paddle):
-        ball_vel[1] *= -1
-        ball.y = paddle.top - BALL_SIZE
+        if self.ball.colliderect(self.paddle):
+            self.ball_vel[1] *= -1
+            self.ball.y = self.paddle.top - self.BALL_SIZE
+            reward = 0.2
 
-    hit_index = ball.collidelist([block[0] for block in blocks])
-    if hit_index != -1:
-        block_rect, _ = blocks.pop(hit_index)
-        if abs(ball.bottom - block_rect.top) < 10 or abs(ball.top - block_rect.bottom) < 10:
-            ball_vel[1] *= -1
-        else:
-            ball_vel[0] *= -1
+        hit_index = self.ball.collidelist([block[0] for block in self.blocks])
+        if hit_index != -1:
+            block_rect, _ = self.blocks.pop(hit_index)
+            if abs(self.ball.bottom - block_rect.top) < 10 or abs(self.ball.top - block_rect.bottom) < 10:
+                self.ball_vel[1] *= -1
+            else:
+                self.ball_vel[0] *= -1
+            reward = 1.0  # reward for breaking block
 
-    if ball.bottom >= HEIGHT:
-        reset_ball_paddle()
-        blocks = create_blocks()
+        if self.ball.bottom >= self.HEIGHT:
+            self.done = True
+            reward = -1.0  # penalty for losing
 
-    if not blocks:
-        WIN.fill((0, 0, 0))
-        show_message("Winner! ")
-        reset_ball_paddle()
-        blocks = create_blocks()
+        if not self.blocks:
+            self.done = True
+            reward = 10.0  # bonus for winning
 
-    pygame.draw.rect(WIN, WHITE, paddle)
-    pygame.draw.ellipse(WIN, (200, 200, 200), ball)
-    for block, color in blocks:
-        pygame.draw.rect(WIN, color, block)
+        return self.get_state(), reward, self.done, {}
 
-    pygame.display.flip()
+    def render(self):
+        if not self.display:
+            return
 
-pygame.quit()
-sys.exit()
+        self.clock.tick(self.FPS)
+        self.WIN.fill((30, 30, 30))
+        pygame.draw.rect(self.WIN, (255, 255, 255), self.paddle)
+        pygame.draw.ellipse(self.WIN, (200, 200, 200), self.ball)
+        for block, color in self.blocks:
+            pygame.draw.rect(self.WIN, color, block)
+        pygame.display.flip()
+
+    def close(self):
+        pygame.quit()
