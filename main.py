@@ -16,10 +16,10 @@ def main():
         num_actions=num_actions,
         device=device,
         lr=1e-3,
-        gamma=0.80,
+        gamma=0.90,
         epsilon_start=1.0,
-        epsilon_end=0.05,
-        epsilon_decay=0.995,
+        epsilon_end=0.00,
+        epsilon_decay=0.099,
         buffer_size=50000,
         batch_size=64,
         target_update_freq=1000
