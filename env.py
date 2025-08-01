@@ -15,7 +15,7 @@ class AtariEnv:
 
         self.colors = [(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,165,0)]
 
-        self.display = False  # turn off when training, set True to render
+        self.display = True  # turn off when training, set True to render
 
         if self.display:
             self.WIN = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
@@ -104,11 +104,15 @@ class AtariEnv:
 
         return self.get_state(), reward, self.done, {}
 
-    def render(self):
-        if not self.display:
-            return
+        def render(self):
+            if not self.display:
+                return
 
-        for event in pygame.event.get():  # ✅ needed to keep window responsive
+        if not hasattr(self, "WIN") or self.WIN is None:
+            self.WIN = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+            pygame.display.set_caption("Atari Env")
+
+        for event in pygame.event.get(): 
             if event.type == pygame.QUIT:
                 self.close()
                 exit()
@@ -120,6 +124,7 @@ class AtariEnv:
         for block, color in self.blocks:
             pygame.draw.rect(self.WIN, color, block)
         pygame.display.flip()
+
 
     def close(self):
         pygame.quit()
