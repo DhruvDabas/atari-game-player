@@ -4,7 +4,6 @@ import numpy as np
 
 class AtariEnv:
     def __init__(self):
-
         pygame.init()
         self.WIDTH, self.HEIGHT = 680, 580
         self.PADDLE_WIDTH, self.PADDLE_HEIGHT = 85, 15
@@ -38,19 +37,20 @@ class AtariEnv:
         return blocks
 
     def reset(self):
-        self.paddle = pygame.Rect(
-            random.randint(0, self.WIDTH - self.PADDLE_WIDTH),
+        self.paddle = pygame.Rect( 
+            (self.WIDTH - self.PADDLE_WIDTH) // 2,
             self.HEIGHT - 40,
             self.PADDLE_WIDTH,
             self.PADDLE_HEIGHT
-        )
+)
+
         self.ball = pygame.Rect(
-            random.randint(50, self.WIDTH - 50 - self.BALL_SIZE),
-            random.randint(self.HEIGHT // 3, self.HEIGHT // 2),
+            self.WIDTH // 2,
+            self.HEIGHT // 2,
             self.BALL_SIZE,
             self.BALL_SIZE
-        )
-        self.ball_vel = [random.choice([-4, -3, 3, 4]), -4]
+)
+        self.ball_vel = [4, -4]  # consistent speed and direction
         self.blocks = self.create_blocks()
         self.done = False
         return self.get_state()
@@ -65,9 +65,9 @@ class AtariEnv:
         ], dtype=np.float32)
 
     def step(self, action):
-        if action == 1 and self.paddle.left > 0:
+        if action == 0 and self.paddle.left > 0:
             self.paddle.x -= self.paddle_speed
-        elif action == 2 and self.paddle.right < self.WIDTH:
+        elif action == 1 and self.paddle.right < self.WIDTH:
             self.paddle.x += self.paddle_speed
 
         self.ball.x += self.ball_vel[0]
@@ -107,6 +107,11 @@ class AtariEnv:
     def render(self):
         if not self.display:
             return
+
+        for event in pygame.event.get():  # ✅ needed to keep window responsive
+            if event.type == pygame.QUIT:
+                self.close()
+                exit()
 
         self.clock.tick(self.FPS)
         self.WIN.fill((30, 30, 30))

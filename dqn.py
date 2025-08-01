@@ -4,15 +4,20 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+import pickle
 from collections import deque
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(DQN, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 128),
+            nn.Linear(input_dim, 256),  # Larger network
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Dropout(0.2),  # Regularization
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, 128),
             nn.ReLU(),
             nn.Linear(128, output_dim)
         )
@@ -33,8 +38,8 @@ class DQNAgent:
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
 
-        self.optimizer = optim.NAdam(self.model.parameters(), lr=lr)
-        self.loss_fn = nn.MSELoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)  # Adam instead of NAdam
+        self.loss_fn = nn.SmoothL1Loss()  # Huber loss for more stable training
 
         self.gamma = gamma
         self.epsilon = epsilon_start
@@ -69,27 +74,86 @@ class DQNAgent:
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.FloatTensor(dones).to(self.device)
 
-        q_values = self.model(states).gather(1, actions).squeeze(1)
+        # Current Q values
+        current_q_values = self.model(states).gather(1, actions).squeeze(1)
+        
+        # Double DQN: use main network to select action, target network to evaluate
         with torch.no_grad():
-            max_next_q = self.target_model(next_states).max(1)[0]
-            target = rewards + (1 - dones) * self.gamma * max_next_q
+            next_actions = self.model(next_states).argmax(1, keepdim=True)
+            next_q_values = self.target_model(next_states).gather(1, next_actions).squeeze(1)
+            target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
-        loss = self.loss_fn(q_values, target)
+        loss = self.loss_fn(current_q_values, target_q_values)
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)  # gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)  # Tighter gradient clipping
         self.optimizer.step()
 
         self.train_steps += 1
         if self.train_steps % self.target_update_freq == 0:
             self.target_model.load_state_dict(self.model.state_dict())
 
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        # Slower epsilon decay
+        if self.epsilon > self.epsilon_min:
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
     def save(self, path):
-        torch.save(self.model.state_dict(), path)
+        checkpoint = {
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'epsilon': self.epsilon,
+            'train_steps': self.train_steps
+        }
+        torch.save(checkpoint, path)
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
-        self.target_model.load_state_dict(self.model.state_dict())
+        checkpoint = torch.load(path, map_location=self.device)
+        
+        # Handle both old format (direct state_dict) and new format (dict with keys)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            # New format
+            model_state_dict = checkpoint['model_state_dict']
+            
+            # Load optimizer state and training progress if available
+            if 'optimizer_state_dict' in checkpoint:
+                try:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                except:
+                    print("Could not load optimizer state - continuing with fresh optimizer")
+            if 'epsilon' in checkpoint:
+                self.epsilon = checkpoint['epsilon']
+            if 'train_steps' in checkpoint:
+                self.train_steps = checkpoint['train_steps']
+        else:
+            # Old format (direct state_dict)
+            model_state_dict = checkpoint
+            print("Loaded model in old format - training progress not restored")
+        
+        # Try to load the state dict, handle architecture mismatches
+        try:
+            self.model.load_state_dict(model_state_dict)
+            self.target_model.load_state_dict(self.model.state_dict())
+            print("Model weights loaded successfully")
+        except RuntimeError as e:
+            print(f"Architecture mismatch detected: {e}")
+            print("Starting with fresh weights due to network architecture change")
+            # Reset training progress since we can't use old weights
+            self.epsilon = 1.0
+            self.train_steps = 0
+
+    def save_replay_buffer(self, path):
+        """Save replay buffer to file"""
+        with open(path, 'wb') as f:
+            pickle.dump(list(self.replay_buffer), f)
+
+    def load_replay_buffer(self, path):
+        """Load replay buffer from file"""
+        try:
+            with open(path, 'rb') as f:
+                buffer_data = pickle.load(f)
+                self.replay_buffer = deque(buffer_data, maxlen=self.replay_buffer.maxlen)
+                print(f"Loaded replay buffer with {len(self.replay_buffer)} experiences")
+        except Exception as e:
+            print(f"Could not load replay buffer: {e}")
+            self.replay_buffer = deque(maxlen=self.replay_buffer.maxlen)
