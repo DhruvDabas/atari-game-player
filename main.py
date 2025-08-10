@@ -6,7 +6,7 @@ from dqn import DQNAgent
 import pickle
 
 def main():
-    TRAIN_MODEL = False  # ❌ Skip training, only run the trained model
+    TRAIN_MODEL = False  # only run the trained model
     
     env = AtariEnv()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,7 +44,7 @@ def main():
 
     # === Testing trained model ===
     print("\nTesting trained model...")
-    env.display = True  # ✅ Enable rendering for testing
+    env.display = True  #  rendering for testing
     
     for test_episode in range(3):
         state = env.reset()
@@ -53,7 +53,7 @@ def main():
         steps = 0
 
         old_epsilon = agent.epsilon
-        agent.epsilon = 0.0  # ✅ Disable exploration for deterministic play
+        agent.epsilon = 0.0  #  Disable exploration for deterministic play
 
         while not done and steps < 2000:
             action = agent.select_action(state)
@@ -61,7 +61,7 @@ def main():
             state = next_state
             total_reward += reward
             steps += 1
-            env.render()  # ✅ Show gameplay
+            env.render()  # render gameplay
 
         agent.epsilon = old_epsilon
         print(f"Test Episode {test_episode + 1} | Reward: {total_reward:.2f} | Steps: {steps}")
